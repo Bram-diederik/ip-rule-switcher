@@ -9,6 +9,7 @@ cards:
         - domain: device_tracker
           attributes:
             ip_table: '0'
+            tag: doorman
           options:
             tap_action:
               action: call-service
@@ -19,6 +20,7 @@ cards:
         - domain: device_tracker
           attributes:
             ip_table: 0
+            tag: doorman
           options:
             tap_action:
               action: call-service
@@ -38,6 +40,7 @@ cards:
         - domain: device_tracker
           attributes:
             ip_table: 12
+            tag: doorman
           options:
             tap_action:
               action: call-service
