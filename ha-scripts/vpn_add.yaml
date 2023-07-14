@@ -1,0 +1,13 @@
+alias: vpn_add
+sequence:
+  - service: var.set
+    data:
+      entity_id: var.vpn_ip
+      value: "{{state_attr(entity_id,'ip')}}"
+  - service: var.set
+    data:
+      entity_id: var.vpn_table
+      value: "{{table}}"
+  - service: shell_command.vpn_add
+    data: {}
+mode: single

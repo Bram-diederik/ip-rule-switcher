@@ -1,0 +1,12 @@
+var:
+  vpn_ip:
+    friendly_name: "ip to use for vpn script"
+    initial_value:  "null"
+  vpn_table:
+    friendly_name: "ip table to use for vpn script"
+    initial_value:  "0"
+
+
+shell_command:
+   vpn_add: "/config//vpn.sh add {{states('var.vpn_ip')}} {{states('var.vpn_table')}}"
+   vpn_del: "/config//vpn.sh del {{states('var.vpn_ip')}}"

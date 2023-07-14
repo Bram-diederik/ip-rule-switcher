@@ -1,0 +1,9 @@
+alias: vpn_del
+sequence:
+  - service: var.set
+    data:
+      entity_id: var.vpn_ip
+      value: "{{state_attr(entity_id,'ip')}}"
+  - service: shell_command.vpn_del
+    data: {}
+mode: single

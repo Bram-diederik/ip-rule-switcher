@@ -1,0 +1,49 @@
+type: vertical-stack
+cards:
+  - type: custom:auto-entities
+    card:
+      type: entities
+      title: Add to Vpn
+    filter:
+      include:
+        - domain: device_tracker
+          attributes:
+            ip_table: '0'
+          options:
+            tap_action:
+              action: call-service
+              service: script.vpn_add
+              data:
+                entity_id: this.entity_id
+                table: '12'
+        - domain: device_tracker
+          attributes:
+            ip_table: 0
+          options:
+            tap_action:
+              action: call-service
+              service: script.vpn_add
+              data:
+                entity_id: this.entity_id
+                table: '12'
+      exclude:
+        - domain: device_tracker
+          state: 'off'
+  - type: custom:auto-entities
+    card:
+      type: entities
+      title: Remove form Vpn
+    filter:
+      include:
+        - domain: device_tracker
+          attributes:
+            ip_table: 12
+          options:
+            tap_action:
+              action: call-service
+              service: script.vpn_del
+              data:
+                entity_id: this.entity_id
+      exclude:
+        - domain: device_tracker
+          state: 'off'
