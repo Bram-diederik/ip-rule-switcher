@@ -1,4 +1,5 @@
 <?php
+// common files
 include("/opt/ip-rule-switcher/settings.php");
 
 $db = new SQLite3('/opt/ip-rule-switcher/ipaddress.db');
@@ -17,6 +18,10 @@ $db->exec($query);
 $query = "CREATE TABLE IF NOT EXISTS ip_table_hosts (
             ip_address TEXT PRIMARY KEY ,
             hostname TEXT
+          )";
+$db->exec($query);
+$query = "CREATE TABLE IF NOT EXISTS ip_nmap_hosts (
+            ip_address TEXT PRIMARY KEY 
           )";
 $db->exec($query);
 
@@ -99,6 +104,22 @@ function add_db($ipAddress,int $nTable) {
 
 }
 
+function add_nmap($ipAddress) {
+  global $db;
+  global $debug;
+  if ($debug) {
+    echo "add nmap $ipAddress \n";
+  }
+  $state = 1; // 1 for on, 0 for off
+  // Insert data into the ip_table_switch table
+  $query = "INSERT OR REPLACE INTO ip_nmap_hosts (ip_address) VALUES (:ip)";
+  $statement = $db->prepare($query);
+  $statement->bindValue(':ip', $ipAddress, SQLITE3_TEXT);
+  $statement->execute();
+
+}
+
+
 function del_route($ipAddress,int $nTable) {
   global $db;
   global $debug;
@@ -127,6 +148,20 @@ function del_db($ipAddress) {
   $statement = $db->prepare($query);
   $statement->bindValue(':ip', $ipAddress, SQLITE3_TEXT);
   $statement->bindValue(':state', $state, SQLITE3_INTEGER);
+  $statement->execute();
+}
+
+function del_nmap($ipAddress) {
+  global $db;
+  global $debug;
+  if ($debug) {
+    echo "del nmap $ipAddress\n";
+  }
+  $state = 0; // 1 for on, 0 for off
+  // Insert data into the ip_table_switch table
+  $query = "DELETE FROM ip_nmap_hosts WHERE ip_address == :ip)";
+  $statement = $db->prepare($query);
+  $statement->bindValue(':ip', $ipAddress, SQLITE3_TEXT);
   $statement->execute();
 }
 
@@ -277,6 +312,9 @@ function parseARPTable() {
 
     // Iterate through each line and extract the IP addresses and hostnames
     foreach ($lines as $line) {
+        if (strpos($line, '<incomplete>') !== false) {
+             continue; // Skip this entry and proceed to the next line
+        }
         $matches = [];
         // Match IP addresses using regular expression
         preg_match('/\((\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\)/', $line, $matches);
@@ -286,7 +324,9 @@ function parseARPTable() {
             // Match hostnames using regular expression
             preg_match('/(.*)\(((\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}))\)/', $line, $hostnameMatches);
             $hostname = (trim($hostnameMatches[1]) !="") ? trim($hostnameMatches[1]) : $ipAddress;
-
+            if ($hostname == "?") {
+              $hostname = $ipAddress;
+            }
             // Store the IP address and hostname in an array
             $ipAddresses[] = [
                 'ip_address' => $ipAddress,
@@ -296,6 +336,111 @@ function parseARPTable() {
     }
 
     return $ipAddresses;
+}
+
+function nmapScan($ipAddress = false) {
+    global $db;
+    if ($ipAddress ) {
+      $query = "SELECT ip_address FROM ip_nmap_hosts WHERE ip_address = :ipAddress";
+      // Execute the query
+      $statement = $db->prepare($query);
+      $statement->bindValue(':ipAddress', $ipAddress, SQLITE3_TEXT);
+      $result = $statement->execute();
+    } else {
+      $query = "SELECT ip_address FROM ip_nmap_hosts";
+      // Execute the query
+      $statement = $db->prepare($query);
+      $result = $statement->execute();
+    }
+
+    // Array to store the IP addresses
+    $ipAddresses = [];
+    $found = false;
+    // Fetch the IP addresses from the query result
+    while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+print_r($row);
+        $ipAddresses[] = $row['ip_address'];
+        $found = true;
+    }
+
+    if ($found) {
+      $command = 'nmap -sn -n ' . implode(' ', $ipAddresses);
+      // Execute the command and capture the output
+      $output = shell_exec($command);
+
+      // Process the output and extract the IP addresses and hostnames
+      $lines = explode("\n", $output);
+      $scannedIPs = [];
+
+      foreach ($lines as $line) {
+          // Match IP addresses using regular expression
+          preg_match('/^Nmap scan report for (\S+)/', $line, $matches);
+
+          if (isset($matches[1])) {
+            $ipAddress = $matches[1];
+            // Store the IP address and hostname in an array
+            $scannedIPs[] = [
+                'ip_address' => $ipAddress,
+                'hostname' => $ipAddress
+            ];
+          }
+      }
+     print_r($scannedIPs);
+      return $scannedIPs;
+    } else {
+      return false;
+    }
+}
+
+function purge($argument) {
+    if (strpos($argument, '/') !== false) {
+        // IP address with CIDR notation
+        $parts = explode('/', $argument);
+        $ipaddress = $parts[0];
+        $cidr = $parts[1];
+        
+        $ip = ip2long($ipaddress);
+        $mask = -1 << (32 - $cidr);
+        $start = $ip & $mask;
+        $end = $start | ~$mask;
+        
+        for ($i = $start; $i <= $end; $i++) {
+            purge_ip(long2ip($ip));
+        }
+    } elseif (strpos($argument, '-') !== false) {
+        // IP address range
+        $range = explode('-', $argument);
+        $start = ip2long(trim($range[0]));
+        $end = ip2long(trim($range[1]));
+        
+        for ($ip = $start; $ip <= $end; $ip++) {
+            purge_ip(long2ip($ip));
+      }
+    } else {
+        // Single IP address
+        $ipaddress = $argument;
+        purge_ip($ipaddress);
+    }
+}
+
+
+
+
+function purge_ip($ipAddress) {
+    global $db;
+    // Prepare the DELETE queries for each table
+    $queries = [
+        "DELETE FROM ip_table_switch WHERE ip_address = :ipAddress",
+        "DELETE FROM ip_table_hosts WHERE ip_address = :ipAddress",
+        "DELETE FROM ip_nmap_hosts WHERE ip_address = :ipAddress"
+    ];
+
+    // Bind the IP address parameter and execute the DELETE queries
+    foreach ($queries as $query) {
+        $statement = $db->prepare($query);
+        $statement->bindValue(':ipAddress', $ipAddress, SQLITE3_TEXT);
+        $statement->execute();
+    }
 }
 
 ?>

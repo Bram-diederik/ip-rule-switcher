@@ -1,9 +1,13 @@
 #!/usr/bin/php
 <?php
-//script to be run at boot
+// purge a ip (range) from the system
+
 include("/opt/ip-rule-switcher/common.php");
 include("/opt/ip-rule-switcher/homeassistant.php");
+
+$ip = $argv[1];
 init_db();
-ha_init_db();
+purge($ip);
+purge_ha($ip);
 close_db();
 ?>

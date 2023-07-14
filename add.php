@@ -1,6 +1,6 @@
 #!/usr/bin/php
 <?php
-#add an IP to the vpn gateway
+// add an IP (range) to the vpn gateway
 
 include("/opt/ip-rule-switcher/common.php");
 

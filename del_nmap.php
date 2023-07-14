@@ -1,10 +1,11 @@
 #!/usr/bin/php
 <?php
-//script to be started at boot
+// add an IP to the nmap scan
 
 include("/opt/ip-rule-switcher/common.php");
 
+$ip = $argv[1];
 init_db();
-init_ip();
+del_nmap($ip);
 close_db();
 ?>

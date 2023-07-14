@@ -1,5 +1,6 @@
 #!/usr/bin/php
 <?php
+//webhook to delete a ip (range) from home assistant
 
 include("/opt/ip-rule-switcher/common.php");
 include("/opt/ip-rule-switcher/homeassistant.php");

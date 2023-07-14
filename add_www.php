@@ -1,6 +1,6 @@
 #!/usr/bin/php
 <?php
-#add an IP to the vpn gateway
+// web hook for home assistant to add a ip to the table
 
 include("/opt/ip-rule-switcher/common.php");
 include("/opt/ip-rule-switcher/homeassistant.php");

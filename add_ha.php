@@ -1,6 +1,6 @@
 #!/usr/bin/php
 <?php
-#add an IP to the vpn gateway
+// add an IP (range) to the scope of home assistant
 
 include("/opt/ip-rule-switcher/common.php");
 include("/opt/ip-rule-switcher/homeassistant.php");
