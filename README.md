@@ -7,7 +7,7 @@ to deny internet access or use an alternative gateway like a vpn.
 
 start up.
 
-edit /etc/systemd/system/multi-user.target.wants/ip-rule-switcher.service
+edit  /etc/systemd/system/ip-rule-switcher.service
 ```
 [Unit]
 Description=IP Rule Switcher
