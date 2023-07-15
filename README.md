@@ -1,4 +1,4 @@
-# ip-rule-swicher
+# ip-rule-switcher
 ![](./images/ip-rule-switcher.png)
 
 allows management of internet access for IPV4 devices.
