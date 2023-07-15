@@ -303,7 +303,7 @@ function ipaddess_add($argument,$table) {
 
 function parseARPTable() {
     // Execute the arp command to retrieve the ARP table
-    $output = shell_exec('arp -a');
+    $output = shell_exec('/sbin/arp -a');
 
     // Split the output into lines
     $lines = explode("\n", $output);
