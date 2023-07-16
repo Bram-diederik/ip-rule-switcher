@@ -1,6 +1,7 @@
-<?php
+w<?php
 // common files
 include("/opt/ip-rule-switcher/settings.php");
+include("/opt/ip-rule-switcher/ip_rules.php");
 
 $db = new SQLite3('/opt/ip-rule-switcher/ipaddress.db');
 $debug = true;
@@ -21,7 +22,13 @@ $query = "CREATE TABLE IF NOT EXISTS ip_table_hosts (
           )";
 $db->exec($query);
 $query = "CREATE TABLE IF NOT EXISTS ip_nmap_hosts (
-            ip_address TEXT PRIMARY KEY 
+           ip_address TEXT PRIMARY KEY
+          )";
+$db->exec($query);
+
+$query = "CREATE TABLE IF NOT EXISTS ip_table_dns_route (
+           ip_table INTEGER PRIMARY KEY,
+           ip_address TEXT
           )";
 $db->exec($query);
 
@@ -38,33 +45,62 @@ function restore_from_db() {
         while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
             $ipAddresses[] = [
                 'ip_address' => $row['ip_address'],
-                'table' => $row['ip_table']
+                'ip_table' => $row['ip_table']
             ];
         }
     }
     foreach ($ipAddresses as $ipData) {
         $ipAddress = $ipData['ip_address'];
         $nTable = $ipData['ip_table'];
-        route_add($ipAddress, $nTable);
+        add_route($ipAddress, $nTable);
     }
 
 }
 
-function init_ip() {
-  //this code is to custom for every installation to use global vars or settings
+function add_dns_db($ipAddress,int $nTable)  {
+  global $db;
+  $query = "INSERT OR REPLACE INTO ip_table_dns_route (ip_address, ip_table) VALUES (:ip, :table)";
+  $statement = $db->prepare($query);
+  $statement->bindValue(':ip', $ipAddress, SQLITE3_TEXT);
+  $statement->bindValue(':table', $nTable, SQLITE3_INTEGER);
+  $statement->execute();
 
-  $IF1="br0";
-  $IF2="br1";
-  $VPN_GATEWAY="192.168.122.2";
-  //table 12 is a vpn route
-  shell_exec("ip route add 192.168.122.0/24  dev $IF2 table 12");
-  shell_exec("ip route add default via $VPN_GATEWAY dev $IF2 table 12");
-  shell_exec("ip route add 192.168.5.0/24  dev $IF1 table 12");
+}
 
-  //table 11 does not go to the internet. use an existing IP that does not forward traffic
-  shell_exec("ip route add 192.168.5.0/24 dev $IF1 table 11");
-  
-  shell_exec("ip route add default via 192.168.5.43 table 11");
+function add_dns($ipAddress,int $nTable) {
+  //there is no delete. this rule purges the prevouse rule and sets in.
+  // default could have a diffrent ip
+  global $db;
+  global $my_ip;
+  //purge rule
+ 
+  $findCommand = "iptables -t nat -L PREROUTING --line-numbers -n| grep \"$ipAddress\" | grep \"53\"";
+  $findResult = shell_exec($findCommand);
+
+  if ($findResult) {
+   // Extract the line numbers from the find result
+   preg_match_all('/^\s*(\d+).*$/m', $findResult, $matches);
+   $lineNumbers = $matches[1];
+
+   // Remove the rules using the line numbers
+   foreach ($lineNumbers as $lineNumber) {
+    $removeCommand = "iptables -t nat -D PREROUTING $lineNumber";
+    echo  $removeCommand . "\n";;
+    shell_exec($removeCommand);
+   }
+  } else {
+  echo "No iptables rule found with destination IP $ipAddress.";
+  }
+
+  $dns = get_dns($nTable);
+  if ($dns == "default")  {
+
+  } else {
+    //die("iptables -t nat -A PREROUTING -s $ipAddress -d $my_ip  -p udp --dport 53 -j DNAT --to-destination $dns ");
+    exec("iptables -t nat -A PREROUTING -s $ipAddress -d $my_ip  -p udp --dport 53 -j DNAT --to-destination $dns ");
+
+  }
+
 }
 
 function add_route($ipAddress,int $nTable) {
@@ -84,7 +120,7 @@ function add_route($ipAddress,int $nTable) {
     shell_exec("ip rule add from $ipAddress table $nTable");
     shell_exec("ip rule add to $ipAddress table $nTable");
   }
-
+  add_dns($ipAddress,$nTable); 
 }
 
 function add_db($ipAddress,int $nTable) {
@@ -134,6 +170,8 @@ function del_route($ipAddress,int $nTable) {
     shell_exec("ip rule del from $ipAddress table $nTable");
     shell_exec("ip rule del to $ipAddress table $nTable");
   }
+  //set default dns
+  add_dns($ipAddress,0);
 }
 
 function del_db($ipAddress) {
@@ -195,6 +233,23 @@ function get_host($ipAddress) {
         return $row['hostname'];
     } else {
         return "Unknown Host";
+    }
+}
+
+function get_dns($nTable) {
+    global $db;
+    
+    $query = "SELECT ip_address FROM ip_table_dns_route WHERE ip_table = :table";
+    $statement = $db->prepare($query);
+    $statement->bindValue(':table', $nTable, SQLITE3_INTEGER);
+    $result = $statement->execute();
+    $row = $result->fetchArray(SQLITE3_ASSOC);
+    
+    // Return the hostname if found, otherwise return a default value
+    if ($row && isset($row['ip_address'])) {
+        return $row['ip_address'];
+    } else {
+        return "default";
     }
 }
 

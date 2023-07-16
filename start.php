@@ -6,5 +6,6 @@ include("/opt/ip-rule-switcher/common.php");
 
 init_db();
 init_ip();
+restore_from_db();
 close_db();
 ?>
