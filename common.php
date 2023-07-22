@@ -1,4 +1,4 @@
-w<?php
+<?php
 // common files
 include("/opt/ip-rule-switcher/settings.php");
 include("/opt/ip-rule-switcher/ip_rules.php");
@@ -13,7 +13,8 @@ global $db;
 $query = "CREATE TABLE IF NOT EXISTS ip_table_switch (
             ip_address TEXT PRIMARY KEY ,
             state INTEGER,
-            ip_table INTEGER
+            ip_table INTEGER,
+            device TEXT
           )";
 $db->exec($query);
 $query = "CREATE TABLE IF NOT EXISTS ip_table_hosts (
@@ -74,7 +75,7 @@ function add_dns($ipAddress,int $nTable) {
   global $my_ip;
   //purge rule
  
-  $findCommand = "iptables -t nat -L PREROUTING --line-numbers -n| grep \"$ipAddress\" | grep \"53\"";
+  $findCommand = "iptables -t nat -L PREROUTING --line-numbers -n| grep \" $ipAddress \" | grep \"53\"";
   $findResult = shell_exec($findCommand);
 
   if ($findResult) {
@@ -96,34 +97,41 @@ function add_dns($ipAddress,int $nTable) {
   if ($dns == "default")  {
 
   } else {
-    //die("iptables -t nat -A PREROUTING -s $ipAddress -d $my_ip  -p udp --dport 53 -j DNAT --to-destination $dns ");
+    echo("iptables -t nat -A PREROUTING -s $ipAddress -d $my_ip  -p udp --dport 53 -j DNAT --to-destination $dns \n");
     exec("iptables -t nat -A PREROUTING -s $ipAddress -d $my_ip  -p udp --dport 53 -j DNAT --to-destination $dns ");
 
   }
 
 }
 
-function add_route($ipAddress,int $nTable) {
+function add_route($ipAddress,int $nTable,$device) {
   global $debug;
   if ($debug) {
-    echo "add route $ipAddress  $nTable \n ip rule list table $nTable | grep $ipAddress\n ";
+    echo "add route $ipAddress $device $nTable \n ip rule list table $nTable | grep $ipAddress\n ";
   }
   if ($table = get_table($ipAddress))
     del_route($ipAddress, $table);
 
 
   // Execute the command and capture the output
-  $output = shell_exec("ip rule list table $nTable | grep $ipAddress");
+  $output = shell_exec("ip rule list table $nTable | grep \" $ipAddress \"");
 
   // Check if the output contains any result
   if (empty($output)) {
-    shell_exec("ip rule add from $ipAddress table $nTable");
-    shell_exec("ip rule add to $ipAddress table $nTable");
+    if ($debug) {
+      echo("ip rule add from $ipAddress dev $device table $nTable");
+      echo("ip rule add to $ipAddress dev $device table $nTable");
+    }
+    shell_exec("ip rule add from $ipAddress dev $device table $nTable");
+    shell_exec("ip rule add to $ipAddress dev $device table $nTable");
+  }
+  else { 
+    echo "not empty \n $output\n";
   }
   add_dns($ipAddress,$nTable); 
 }
 
-function add_db($ipAddress,int $nTable) {
+function add_db($ipAddress,int $nTable,$device) {
   global $db;
   global $debug;
   if ($debug) {
@@ -131,9 +139,10 @@ function add_db($ipAddress,int $nTable) {
   }
   $state = 1; // 1 for on, 0 for off
   // Insert data into the ip_table_switch table
-  $query = "INSERT OR REPLACE INTO ip_table_switch (ip_address, state,ip_table) VALUES (:ip, :state,:ip_table)";
+  $query = "INSERT OR REPLACE INTO ip_table_switch (ip_address, state,ip_table,device) VALUES (:ip, :state,:ip_table,:device)";
   $statement = $db->prepare($query);
   $statement->bindValue(':ip', $ipAddress, SQLITE3_TEXT);
+  $statement->bindValue(':device', $device, SQLITE3_TEXT);
   $statement->bindValue(':state', $state, SQLITE3_INTEGER);
   $statement->bindValue(':ip_table', $nTable, SQLITE3_INTEGER);
   $statement->execute();
@@ -167,8 +176,8 @@ function del_route($ipAddress,int $nTable) {
   
   // Check if the output contains any result
   if (@!empty($output)) {
-    shell_exec("ip rule del from $ipAddress table $nTable");
-    shell_exec("ip rule del to $ipAddress table $nTable");
+    shell_exec("ip rule del from $ipAddress dev wg0 table $nTable");
+    shell_exec("ip rule del to $ipAddress dev wg0 table $nTable");
   }
   //set default dns
   add_dns($ipAddress,0);
@@ -277,51 +286,45 @@ function get_table($ipAddress) {
     }
 }
 
+function get_device($ipAddress) {
+    // Assuming $db is your SQLite database connection object
+    global $db;
+
+    $query = "SELECT `device` FROM ip_table_switch WHERE state = 1 AND ip_address = :ipAddress";
+    $stmt = $db->prepare($query);
+    $stmt->bindParam(':ipAddress', $ipAddress);
+    $result = $stmt->execute();
+     $row = $result->fetchArray(SQLITE3_ASSOC);
+    
+    if ($row) {
+        return $row['device'];
+    } else {
+        return 0; // or any default value you prefer
+    }
+}
+
 
 
 
 function ipaddess_del($argument) {
-    if (strpos($argument, '/') !== false) {
-        // IP address with CIDR notation
-        $parts = explode('/', $argument);
-        $ipaddress = $parts[0];
-        $cidr = $parts[1];
-        
-        $ip = ip2long($ipaddress);
-        $mask = -1 << (32 - $cidr);
-        $start = $ip & $mask;
-        $end = $start | ~$mask;
-        
-        for ($i = $start; $i <= $end; $i++) {
-            if ($table = get_table(long2ip($i)))
-              del_route(long2ip($i), $table);
-    
-            del_db(long2ip($i));
-        }
-    } elseif (strpos($argument, '-') !== false) {
-        // IP address range
-        $range = explode('-', $argument);
-        $start = ip2long(trim($range[0]));
-        $end = ip2long(trim($range[1]));
-        
-        for ($ip = $start; $ip <= $end; $ip++) {
-            if ($table = get_table(long2ip($ip)))
-              del_route(long2ip($ip), $table);
-            del_db(long2ip($ip));
-        }
-    } else {
-        // Single IP address
-        $ipaddress = $argument;
-        if ($table = get_table($ipaddress))
-           del_route($ipaddress, $table);
-
+   $aIPs = parseIpRange($argument);
+    foreach ($aIPs as $ipaddress) {
         del_db($ipaddress);
     }
 }
 
 
 
-function ipaddess_add($argument,$table) {
+function ipaddess_add($argument,$table,$device) {
+   $aIPs = parseIpRange($argument);
+    foreach ($aIPs as $ipaddress) {
+        add_route($ipaddress, $table,$device);
+        add_db($ipaddress, $table,$device);
+    }
+}
+
+function parseIpRange($argument) {
+    $aIps = [];
     if (strpos($argument, '/') !== false) {
         // IP address with CIDR notation
         $parts = explode('/', $argument);
@@ -333,9 +336,8 @@ function ipaddess_add($argument,$table) {
         $start = $ip & $mask;
         $end = $start | ~$mask;
         
-        for ($i = $start; $i <= $end; $i++) {
-            add_route(long2ip($i),$table);
-            add_db(long2ip($i), $table);
+        for ($ip = $start; $ip <= $end; $i++) {
+            $aIps[] = long2ip($ip);
         }
     } elseif (strpos($argument, '-') !== false) {
         // IP address range
@@ -344,17 +346,15 @@ function ipaddess_add($argument,$table) {
         $end = ip2long(trim($range[1]));
         
         for ($ip = $start; $ip <= $end; $ip++) {
-            add_route(long2ip($ip),$table);
-            add_db(long2ip($ip), $table);
+            $aIps[] = long2ip($ip);
       }
     } else {
         // Single IP address
-        $ipaddress = $argument;
-        add_route($ipaddress, $table);
-        add_db($ipaddress, $table);
+        $ip = $argument;
+        $aIps[] = $ip;
     }
+   return $aIps;
 }
-
 
 function parseARPTable() {
     // Execute the arp command to retrieve the ARP table

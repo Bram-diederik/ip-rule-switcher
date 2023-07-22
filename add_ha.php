@@ -8,6 +8,7 @@ include("/opt/ip-rule-switcher/homeassistant.php");
 $ipRange = $argv[1];
 
 init_db();
+init_ha_db();
 ha_ipaddess_add($ipRange);
 close_db();
 ?>

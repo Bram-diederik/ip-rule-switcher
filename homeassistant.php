@@ -80,17 +80,9 @@ function ha_get_list() {
     global $db;
 
     $query = "
-
-
-
-    SELECT ip_address, state, ip_table
+    SELECT ip_address, state, ip_table,device
     FROM ip_table_switch
-    WHERE state = 1
-    OR (state = 0 AND ip_address NOT IN (SELECT ip_address FROM ip_table_homeassistant))
-    UNION ALL
-    SELECT ip_address, '1' AS state, '0' AS ip_table
-    FROM ip_table_homeassistant
-    WHERE ip_address NOT IN (SELECT ip_address FROM ip_table_switch WHERE state = 1);
+    AND ip_address IN (SELECT ip_address FROM ip_table_homeassistant)
     ";
     $data = [];
     $result = $db->query($query);
@@ -168,10 +160,11 @@ function ha_ipaddess_del($argument) {
 
 
 
-function ha_send($ipAddress, $hostName, $ipTable,$bOnline) {
+function ha_send($ipAddress, $hostName, $ipTable,$bOnline,$device) {
     global $sHomeApiUrl;
     global $sHomeApiKey;
     global $sTag;
+    global $debug;
 
     if ($bOnline) {
        $state = "on"; 
@@ -184,7 +177,8 @@ function ha_send($ipAddress, $hostName, $ipTable,$bOnline) {
         "friendly_name" => $hostName,
         "ip_table" => $ipTable,
         "ip" => $ipAddress,
-        "tag" => $sTag
+        "tag" => $sTag,
+        "device" => $device
     ];
     
     // Prepare the payload
@@ -192,7 +186,8 @@ function ha_send($ipAddress, $hostName, $ipTable,$bOnline) {
         "state" => $state,
         "attributes" => $attributes
     ];
-    
+    if ($debug) 
+     print_r($data);
     // Convert the payload to JSON
     $jsonPayload = json_encode($data);
     
@@ -230,6 +225,7 @@ function ha_parse() {
     $ipAddress = $ipData['ip_address'];
     $state = $ipData['state'];
     $ipTable = $ipData['ip_table'];
+    $device = $ipData['device'];
 
     //Check if IP address is online
     $isOnline = false;
@@ -265,13 +261,13 @@ function ha_parse() {
     }
 
     if ($isOnline) {
-        ha_send($ipAddress, $hostname, $ipTable,true);
+        ha_send($ipAddress, $hostname, $ipTable,true,$device);
     } else {
         $prev_online = get_online($ipAddress);
         if ($prev_online) {
           set_online($ipAddress,0);
           $offlineHostname = get_host($ipAddress); //  Retrieve the offline hostname
-          ha_send($ipAddress, $offlineHostname, $ipTable,false); // Call ha_send() with offline hostname
+          ha_send($ipAddress, $offlineHostname, $ipTable,false,$device); // Call ha_send() with offline hostname
        }
     }
   }
@@ -282,6 +278,7 @@ function ha_parse_ip($ipAddress) {
   
   $onlineDevices = parseARPTable();
     $ipTable = get_table($ipAddress);
+    $device = get_device($ipAddress);
     //Check if IP address is online
     $isOnline = false;
     $hostname = '';
@@ -316,7 +313,7 @@ function ha_parse_ip($ipAddress) {
     }
 
     if ($isOnline) {
-        ha_send($ipAddress, $hostname, $ipTable,true);
+        ha_send($ipAddress, $hostname, $ipTable,true,$device);
     } else {
         $offlineHostname = get_host($ipAddress); //  Retrieve the offline hostname
         ha_send($ipAddress, $offlineHostname, $ipTable,false); // Call ha_send() with offline hostname

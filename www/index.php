@@ -3,7 +3,8 @@
 $ipAddress = $_GET['addr'];
 $tabel = $_GET['table'];
 $action = $_GET['action'];
-$sToken = "12345678";
+$device = $_GET['device'];
+$sToken = "54956432856432895432698754329698436298632985643298368329657843258329";
 
 
 $headers = getallheaders();
@@ -19,12 +20,13 @@ if (preg_match('/Bearer\s(\S+)/', $authorizationHeader, $matches)) {
 
 // Verify the token and perform further actions
 if ($token === $sToken) {
-   if ($action == "off") {
+   if ($action == "del") {
+    echo "sudo /opt/ip-rule-switcher/del_www.php $ipAddress";
      exec("sudo /opt/ip-rule-switcher/del_www.php $ipAddress");
      echo "off";
    } else { 
-     exec("sudo /opt/ip-rule-switcher/add_www.php $ipAddress $tabel");
-     echo "sudo /opt/ip-rule-switcher/add_www.php $ipAddress $tabel";
+     echo "sudo /opt/ip-rule-switcher/add_www.php $ipAddress $tabel $device";
+     exec("sudo /opt/ip-rule-switcher/add_www.php $ipAddress $tabel $device");
      echo "on";
    }
 }

@@ -1,7 +1,9 @@
 <?php
-$sHomeApiUrl = "http://123.12.23.23:8123";
-$sHomeApiKey = "your api key you get in your personal settings page in home assistant";
-$sTag = "instancename";
-$my_ip ="<your machine IP address>";
+//global settings
+
+$sHomeApiUrl = "home assistant IP";
+$sHomeApiKey = "eyFOOBAR";
+$sTag = "my gateway";
+$my_ip ="192.168.5.1";
 ?>
 
