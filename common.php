@@ -336,7 +336,7 @@ function parseIpRange($argument) {
         $start = $ip & $mask;
         $end = $start | ~$mask;
         
-        for ($ip = $start; $ip <= $end; $i++) {
+        for ($ip = $start; $ip <= $end; $ip++) {
             $aIps[] = long2ip($ip);
         }
     } elseif (strpos($argument, '-') !== false) {
