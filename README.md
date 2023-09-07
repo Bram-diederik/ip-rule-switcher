@@ -1,4 +1,4 @@
-broken will write a better replacement
+broken will publish a better replacement very soon.
 
 # ip-rule-switcher
 ![](./images/ip-rule-switcher.png)
